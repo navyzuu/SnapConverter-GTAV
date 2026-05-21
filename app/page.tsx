@@ -17,6 +17,7 @@ export default function Home() {
     files,
     error,
     progress,
+    aiStatus,
     handleFiles,
     applyEnhancement,
     downloadAll,
@@ -106,6 +107,7 @@ export default function Home() {
             onApplyEnhancement={applyEnhancement}
             onDownload={downloadAll}
             onReset={reset}
+            aiStatus={aiStatus}
           />
         )}
       </div>

@@ -8,13 +8,14 @@ import type { EnhanceParams, UpscaleFactor } from '@/lib/enhance';
 gsap.registerPlugin(ScrollTrigger);
 
 type PresetKey = 'original' | 'cinematic' | 'vivid' | 'clean';
+export type UpscaleOption = UpscaleFactor | 'ai';
 
 interface Params {
   brightness: number;
   contrast: number;
   sharpen: number;
   noiseReduction: boolean;
-  upscale: UpscaleFactor;
+  upscale: UpscaleOption;
   saturation: number;
 }
 
@@ -25,12 +26,15 @@ const PRESETS: Record<PresetKey, Params> = {
   clean:     { brightness: 3,  contrast: 8,  sharpen: 4,  noiseReduction: true,  upscale: 2, saturation: 100 },
 };
 
+export type ExtendedEnhanceParams = Omit<EnhanceParams, 'imageData' | 'upscale'> & { upscale: UpscaleOption };
+
 interface EnhancementPanelProps {
-  onApply: (params: Omit<EnhanceParams, 'imageData'>) => void;
+  onApply: (params: ExtendedEnhanceParams) => void;
   isEnhancing: boolean;
+  aiStatus?: string;
 }
 
-export default function EnhancementPanel({ onApply, isEnhancing }: EnhancementPanelProps) {
+export default function EnhancementPanel({ onApply, isEnhancing, aiStatus }: EnhancementPanelProps) {
   const [activePreset, setActivePreset] = useState<PresetKey>('original');
   const [params, setParams] = useState<Params>(PRESETS.original);
   const [expanded, setExpanded] = useState(false);
@@ -148,7 +152,7 @@ export default function EnhancementPanel({ onApply, isEnhancing }: EnhancementPa
           {/* Upscale */}
           <div className="enhancement-option">
             <span style={labelStyle}>Upscale</span>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
               {([1, 2, 4, 8] as UpscaleFactor[]).map((v) => (
                 <button
                   key={v}
@@ -159,7 +163,20 @@ export default function EnhancementPanel({ onApply, isEnhancing }: EnhancementPa
                   {v}x
                 </button>
               ))}
+              <button
+                className={`btn-secondary ${params.upscale === 'ai' ? 'active' : ''}`}
+                onClick={() => handleParamChange({ upscale: 'ai' })}
+                disabled={isEnhancing}
+                title="Real-ESRGAN-anime — slower but removes staircase aliasing"
+              >
+                AI 4x
+              </button>
             </div>
+            {params.upscale === 'ai' && (
+              <p style={{ ...labelStyle, marginTop: '0.4rem', marginBottom: 0, color: 'var(--accent-1)' }}>
+                {aiStatus ?? 'First run downloads model (~5MB) and caches it.'}
+              </p>
+            )}
           </div>
 
           {/* Sharpen */}

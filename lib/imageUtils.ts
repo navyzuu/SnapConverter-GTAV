@@ -1,55 +1,61 @@
-// JPEG DCT deblocking: smooths ONLY at 8×8 block boundaries where the discontinuity
-// is small (artifact) vs large (real edge). Skips real edges entirely.
-// strength 0.0–1.0: how aggressively to blend the boundary pixels.
+// JPEG DCT deblocking: targets 8x8 block boundaries with a 4-pixel-wide smooth band.
+// Pixels closer to the boundary get stronger smoothing; real edges (diff >= 28) are skipped.
 export function applyJpegDeblock(imageData: ImageData, strength: number): ImageData {
   const { data, width, height } = imageData;
-  const output = new Uint8ClampedArray(data);
-  // Only treat a boundary as an artifact if the across-boundary diff is below this.
-  // GTA V blocks typically show ≤20 intensity jump; real edges are 30–120.
-  const edgeThreshold = 22;
+  const out = new Uint8ClampedArray(data);
+  const T = 28; // edge threshold — GTA V artifacts are typically <20, real edges are 30+
 
-  // Smooth horizontal block boundaries (rows 8, 16, 24, …)
-  for (let y = 8; y < height - 1; y += 8) {
-    for (let x = 1; x < width - 1; x++) {
-      // Touch 2-pixel band: rows y-1 and y
-      for (let by = y - 1; by <= y; by++) {
-        if (by <= 0 || by >= height - 1) continue;
-        const ci = (by * width + x) * 4;
-        const pi = ((by - 1) * width + x) * 4;
-        const ni = ((by + 1) * width + x) * 4;
-        for (let c = 0; c < 3; c++) {
-          if (Math.abs(data[pi + c] - data[ni + c]) < edgeThreshold) {
-            output[ci + c] = Math.round(
-              data[ci + c] * (1 - strength) +
-              (data[pi + c] + data[ci + c] + data[ni + c]) / 3 * strength
-            );
-          }
+  // Horizontal boundaries (every 8 rows)
+  for (let bY = 8; bY < height; bY += 8) {
+    for (let x = 0; x < width; x++) {
+      for (let c = 0; c < 3; c++) {
+        // Check discontinuity exactly at the block seam
+        if (Math.abs(
+          data[((bY - 1) * width + x) * 4 + c] -
+          data[(bY * width + x) * 4 + c]
+        ) >= T) continue;
+
+        // Smooth 4 rows: [bY-2, bY-1, bY, bY+1] with weights [0.3, 0.7, 0.7, 0.3]
+        const offsets = [-2, -1, 0, 1];
+        const ws      = [0.3, 0.7, 0.7, 0.3];
+        for (let i = 0; i < 4; i++) {
+          const row = bY + offsets[i];
+          if (row < 1 || row >= height - 1) continue;
+          const ci = (row * width + x) * 4 + c;
+          const pi = ((row - 1) * width + x) * 4 + c;
+          const ni = ((row + 1) * width + x) * 4 + c;
+          const t = strength * ws[i];
+          out[ci] = Math.round(data[ci] * (1 - t) + (data[pi] + data[ci] + data[ni]) / 3 * t);
         }
       }
     }
   }
 
-  // Smooth vertical block boundaries (cols 8, 16, 24, …)
-  for (let x = 8; x < width - 1; x += 8) {
-    for (let y = 1; y < height - 1; y++) {
-      for (let bx = x - 1; bx <= x; bx++) {
-        if (bx <= 0 || bx >= width - 1) continue;
-        const ci = (y * width + bx) * 4;
-        const pi = (y * width + bx - 1) * 4;
-        const ni = (y * width + bx + 1) * 4;
-        for (let c = 0; c < 3; c++) {
-          if (Math.abs(output[pi + c] - output[ni + c]) < edgeThreshold) {
-            output[ci + c] = Math.round(
-              output[ci + c] * (1 - strength) +
-              (output[pi + c] + output[ci + c] + output[ni + c]) / 3 * strength
-            );
-          }
+  // Vertical boundaries (every 8 cols) — reads from out so horizontal pass is preserved
+  for (let bX = 8; bX < width; bX += 8) {
+    for (let y = 0; y < height; y++) {
+      for (let c = 0; c < 3; c++) {
+        if (Math.abs(
+          out[(y * width + bX - 1) * 4 + c] -
+          out[(y * width + bX) * 4 + c]
+        ) >= T) continue;
+
+        const offsets = [-2, -1, 0, 1];
+        const ws      = [0.3, 0.7, 0.7, 0.3];
+        for (let i = 0; i < 4; i++) {
+          const col = bX + offsets[i];
+          if (col < 1 || col >= width - 1) continue;
+          const ci = (y * width + col) * 4 + c;
+          const pi = (y * width + col - 1) * 4 + c;
+          const ni = (y * width + col + 1) * 4 + c;
+          const t = strength * ws[i];
+          out[ci] = Math.round(out[ci] * (1 - t) + (out[pi] + out[ci] + out[ni]) / 3 * t);
         }
       }
     }
   }
 
-  return new ImageData(output, width, height);
+  return new ImageData(out, width, height);
 }
 
 // Tight bilateral filter: only blends pixels with very similar color (colorSigma=8–12).
@@ -248,6 +254,59 @@ export function applyUnsharpMask(
     output[i + 3] = data[i + 3];
   }
   return new ImageData(output, width, height);
+}
+
+// Diagonal anti-aliasing via Sobel gradient angle detection.
+//
+// For each pixel, computes the luminance Sobel gradient direction:
+//   - Flat (mag < 15): skip — no edge here.
+//   - Near-horizontal (angle 75°–105°) or near-vertical (0°–15°, 165°–180°): skip —
+//     these are clean straight edges that should stay sharp.
+//   - Diagonal zone (15°–75° and 105°–165°): apply Gaussian 3×3 at `strength` —
+//     this is where staircase aliasing from GTA V's low-res rendering lives.
+//
+// Result: staircase steps on diagonal lines are softened; horizontal/vertical edges
+// and flat regions are completely untouched.
+export function applyDiagonalSmooth(imageData: ImageData, strength: number = 0.5): ImageData {
+  const { data, width, height } = imageData;
+  const out = new Uint8ClampedArray(data);
+
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const ci = (y * width + x) * 4;
+
+      const tlI = ((y-1)*width+(x-1))*4, tcI = ((y-1)*width+x)*4, trI = ((y-1)*width+(x+1))*4;
+      const mlI = (y*width+(x-1))*4,                               mrI = (y*width+(x+1))*4;
+      const blI = ((y+1)*width+(x-1))*4, bcI = ((y+1)*width+x)*4, brI = ((y+1)*width+(x+1))*4;
+
+      const L = (i: number) => 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+      const tl = L(tlI), tc = L(tcI), tr = L(trI);
+      const ml = L(mlI),               mr = L(mrI);
+      const bl = L(blI), bc = L(bcI), br = L(brI);
+
+      const gx = (tr + 2*mr + br) - (tl + 2*ml + bl);
+      const gy = (bl + 2*bc + br) - (tl + 2*tc + tr);
+      const mag = Math.sqrt(gx*gx + gy*gy);
+
+      if (mag < 15) continue;
+
+      const angle = Math.abs(Math.atan2(gy, gx) * 180 / Math.PI);
+      // Keep clean horizontal and vertical edges sharp; smooth everything in between.
+      if ((angle >= 75 && angle <= 105) || angle <= 15 || angle >= 165) continue;
+
+      for (let c = 0; c < 3; c++) {
+        const v = data[ci + c];
+        const blur = (
+          data[tlI+c] + 2*data[tcI+c] + data[trI+c] +
+          2*data[mlI+c] + 4*v + 2*data[mrI+c] +
+          data[blI+c] + 2*data[bcI+c] + data[brI+c]
+        ) / 16;
+        out[ci + c] = Math.round(v * (1 - strength) + blur * strength);
+      }
+    }
+  }
+
+  return new ImageData(out, width, height);
 }
 
 export function imageDataToOffscreenCanvas(imageData: ImageData): OffscreenCanvas {

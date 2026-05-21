@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { extractJpegFromSnapmatic, blobToObjectURL } from '@/lib/snapmatic';
 import { enhance, terminateWorker } from '@/lib/enhance';
 import type { EnhanceParams, UpscaleFactor } from '@/lib/enhance';
+import { esrganEnhance, terminateEsrganWorker } from '@/lib/esrgan';
+import type { ExtendedEnhanceParams } from '@/components/EnhancementPanel';
 
 export type Stage = 'idle' | 'validating' | 'converting' | 'preview' | 'enhancing' | 'result' | 'downloaded' | 'error';
 
@@ -95,6 +97,7 @@ export function useFileProcessor() {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const [aiStatus, setAiStatus] = useState<string | undefined>(undefined);
   const urlsToRevoke = useRef<string[]>([]);
 
   const revokeAll = useCallback(() => {
@@ -106,6 +109,7 @@ export function useFileProcessor() {
     return () => {
       revokeAll();
       terminateWorker();
+      terminateEsrganWorker();
     };
   }, [revokeAll]);
 
@@ -159,27 +163,59 @@ export function useFileProcessor() {
   }, []);
 
   const applyEnhancement = useCallback(
-    async (params: Omit<EnhanceParams, 'imageData'>) => {
+    async (params: ExtendedEnhanceParams) => {
       if (files.length === 0) return;
       setStage('enhancing');
+      setAiStatus(undefined);
 
       try {
         const updated: FileEntry[] = [];
-        for (const file of files) {
-          const imageData = await imageDataFromBlob(file.rawBlob);
-          const result = await enhance({ ...params, imageData });
-          const blob = await imageDataToJpegBlob(result.imageData);
-          if (file.enhancedUrl) {
-            URL.revokeObjectURL(file.enhancedUrl);
+        const isAi = params.upscale === 'ai';
+
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          let imageData = await imageDataFromBlob(file.rawBlob);
+
+          if (isAi) {
+            // Phase 1: ESRGAN 4x upscale
+            const esrganResult = await esrganEnhance(imageData, {
+              onProgress: (pct) => {
+                const fileOffset = i / files.length;
+                const fileShare  = 1 / files.length;
+                setProgress(Math.round((fileOffset + fileShare * pct / 100) * 100));
+              },
+              onStatus: (msg) => setAiStatus(msg),
+            });
+            imageData = esrganResult.imageData;
+
+            // Phase 2: canvas post-process (sharpen/brightness/contrast/saturation) at upscale=1
+            const canvasParams: EnhanceParams = {
+              ...params,
+              upscale: 1 as UpscaleFactor,
+              imageData,
+            };
+            const canvasResult = await enhance(canvasParams);
+            imageData = canvasResult.imageData;
+          } else {
+            // Normal canvas-only path (upscale is a numeric UpscaleFactor here)
+            const { upscale, ...restParams } = params;
+            const result = await enhance({ ...restParams, upscale: upscale as UpscaleFactor, imageData });
+            imageData = result.imageData;
           }
+
+          const blob = await imageDataToJpegBlob(imageData);
+          if (file.enhancedUrl) URL.revokeObjectURL(file.enhancedUrl);
           const url = blobToObjectURL(blob);
           urlsToRevoke.current.push(url);
           updated.push({ ...file, enhancedBlob: blob, enhancedUrl: url });
         }
+
         setFiles(updated);
+        setAiStatus(undefined);
         setStage('result');
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Enhancement failed');
+        setAiStatus(undefined);
         setStage('error');
       }
     },
@@ -236,6 +272,7 @@ export function useFileProcessor() {
     files,
     error,
     progress,
+    aiStatus,
     handleFiles,
     applyEnhancement,
     downloadSingle,

@@ -2,8 +2,7 @@
 
 import {
   applyJpegDeblock,
-  applyBilateralFilter,
-  applyGaussianBlurN,
+  applyDiagonalSmooth,
   applyUnsharpMask,
   applyBrightnessContrast,
   stepUpscale,
@@ -30,29 +29,30 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
     let current = imageData;
 
     if (noiseReduction) {
-      // Step 1: JPEG-specific deblocking — only touches 8×8 block boundaries where
-      // the discontinuity is small enough to be an artifact (not a real edge).
-      // edgeThreshold=22 means shadows and color transitions are left completely alone.
-      current = applyJpegDeblock(current, 0.75);
-
-      // Step 2: Very tight bilateral (colorSigma=10) cleans up intra-block ringing.
-      // colorSigma=10 means only pixels within ±10 intensity blend together —
-      // real shading gradients (±30+) are not touched, so car form is preserved.
-      current = applyBilateralFilter(current, 1.5, 10);
-
-      // Step 3: Restore micro-contrast lost in smoothing steps
-      current = applyUnsharpMask(current, 0.7, 1, 6);
+      current = applyJpegDeblock(current, 1.0);
     }
 
-    // Sharpen at original resolution — stays proportional at any display/download size
     if (sharpen > 0) {
-      const amount = 0.5 + (sharpen / 10) * 1.8;
+      const amount = 0.6 + (sharpen / 10) * 1.8;
       const blurPasses = sharpen <= 4 ? 1 : 2;
-      const threshold = Math.max(4, 13 - sharpen);
+      const threshold = Math.max(8, 18 - sharpen);
       current = applyUnsharpMask(current, amount, blurPasses, threshold);
     }
 
-    // Upscale after all processing — enlarges an already-clean image
+    // Diagonal anti-aliasing: uses Sobel gradient angle to target staircase on diagonal
+    // edges (15°–75° and 105°–165°). Near-horizontal and near-vertical edges are skipped
+    // entirely so they stay crisp. Runs after sharpen so unsharp mask doesn't undo it.
+    // Applies to any active enhancement; skipped for "Original" (all defaults).
+    const anyEnhancement = noiseReduction || upscale > 1 || sharpen > 0;
+    if (anyEnhancement) {
+      const aaStrength = noiseReduction ? 0.5 : 0.35;
+      current = applyDiagonalSmooth(current, aaStrength);
+      if (noiseReduction) {
+        // Second pass for Clean preset — accumulates further step reduction
+        current = applyDiagonalSmooth(current, aaStrength);
+      }
+    }
+
     if (upscale > 1) {
       const canvas = imageDataToOffscreenCanvas(current);
       const upscaled = stepUpscale(canvas, upscale as 2 | 4 | 8);
@@ -63,7 +63,6 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
       current = applyBrightnessContrast(current, brightness, contrast);
     }
 
-    // Saturation — draw source onto a separate canvas (fixes self-draw bug)
     if (saturation !== 100) {
       const src = imageDataToOffscreenCanvas(current);
       const dest = new OffscreenCanvas(src.width, src.height);
