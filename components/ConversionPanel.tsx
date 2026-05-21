@@ -5,14 +5,15 @@ import BeforeAfter from './BeforeAfter';
 import EnhancementPanel from './EnhancementPanel';
 import DownloadButton from './DownloadButton';
 import type { FileEntry, Stage } from '@/hooks/useFileProcessor';
-import type { EnhanceParams } from '@/lib/enhance';
+import type { ExtendedEnhanceParams } from './EnhancementPanel';
 
 interface ConversionPanelProps {
   files: FileEntry[];
   stage: Stage;
-  onApplyEnhancement: (params: Omit<EnhanceParams, 'imageData'>) => void;
+  onApplyEnhancement: (params: ExtendedEnhanceParams) => void;
   onDownload: () => void;
   onReset: () => void;
+  aiStatus?: string;
 }
 
 export default function ConversionPanel({
@@ -21,6 +22,7 @@ export default function ConversionPanel({
   onApplyEnhancement,
   onDownload,
   onReset,
+  aiStatus,
 }: ConversionPanelProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const selected = files[selectedIndex] ?? files[0];
@@ -99,7 +101,7 @@ export default function ConversionPanel({
 
       {/* Right: controls */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <EnhancementPanel onApply={onApplyEnhancement} isEnhancing={isEnhancing} />
+        <EnhancementPanel onApply={onApplyEnhancement} isEnhancing={isEnhancing} aiStatus={aiStatus} />
         <DownloadButton files={files} onDownload={onDownload} />
       </div>
     </div>
