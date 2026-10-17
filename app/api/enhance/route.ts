@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
-    const model = (formData.get('model') as string) || 'realesrgan-x4plus';
+    const model = (formData.get('model') as string) || '4x-UltraSharp';
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -33,21 +33,39 @@ export async function POST(req: NextRequest) {
     await fs.promises.writeFile(inPath, Buffer.from(arrayBuffer));
 
     try {
-      // Execute Real-ESRGAN Vulkan GPU binary directly
-      await execFileAsync(
-        exePath,
-        [
-          '-i', inPath,
-          '-o', outPath,
-          '-n', model,
-          '-f', 'jpg',
-          '-g', 'auto',
-        ],
-        {
-          cwd: path.dirname(exePath),
-          timeout: 60000,
-        }
-      );
+      // Execute Real-ESRGAN Vulkan GPU binary directly on dedicated NVIDIA RTX GPU (device 1)
+      try {
+        await execFileAsync(
+          exePath,
+          [
+            '-i', inPath,
+            '-o', outPath,
+            '-n', model,
+            '-f', 'jpg',
+            '-g', '1',
+          ],
+          {
+            cwd: path.dirname(exePath),
+            timeout: 60000,
+          }
+        );
+      } catch {
+        // Fallback to auto if device 1 isn't available
+        await execFileAsync(
+          exePath,
+          [
+            '-i', inPath,
+            '-o', outPath,
+            '-n', model,
+            '-f', 'jpg',
+            '-g', 'auto',
+          ],
+          {
+            cwd: path.dirname(exePath),
+            timeout: 60000,
+          }
+        );
+      }
 
       if (!fs.existsSync(outPath)) {
         throw new Error('GPU Upscaler did not produce output file.');

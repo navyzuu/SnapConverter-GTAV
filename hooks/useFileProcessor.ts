@@ -227,17 +227,14 @@ export function useFileProcessor() {
             const enhancedBlob = await res.blob();
             imageData = await imageDataFromBlob(enhancedBlob);
 
-            // Phase 2: apply color grading if needed
-            if (params.brightness !== 0 || params.contrast !== 0 || params.saturation !== 100) {
-              const canvasParams: EnhanceParams = {
-                ...params,
-                upscale: 1 as UpscaleFactor,
-                sharpen: 0,
-                imageData,
-              };
-              const canvasResult = await enhance(canvasParams);
-              imageData = canvasResult.imageData;
-            }
+            // Phase 2: apply post-processing (RCAS, gloss, grain, color grading)
+            const canvasParams: EnhanceParams = {
+              ...params,
+              upscale: 1 as UpscaleFactor,
+              imageData,
+            };
+            const canvasResult = await enhance(canvasParams);
+            imageData = canvasResult.imageData;
           } else if (params.upscale === 'ai') {
             imageData = await imageDataFromBlob(file.rawBlob);
             // Phase 1: ESRGAN 4x upscale

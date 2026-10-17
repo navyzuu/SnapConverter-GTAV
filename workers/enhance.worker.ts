@@ -3,6 +3,7 @@
 import {
   applyJpegDeblock,
   applyFSR_RCAS,
+  applyGTAMetallicSpecular,
   applyBrightnessContrast,
   stepUpscale,
   imageDataToOffscreenCanvas,
@@ -19,10 +20,12 @@ interface WorkerMessage {
   contrast: number;
   noiseReduction: boolean;
   saturation: number;
+  gloss?: number;
+  grain?: number;
 }
 
 self.onmessage = (e: MessageEvent<WorkerMessage>) => {
-  const { id, imageData, upscale, sharpen, brightness, contrast, noiseReduction, saturation } = e.data;
+  const { id, imageData, upscale, sharpen, brightness, contrast, noiseReduction, saturation, gloss, grain } = e.data;
 
   try {
     let current = imageData;
@@ -49,7 +52,12 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
       current = applyFSR_RCAS(current, rcasSharpness);
     }
 
-    // 4. Color grading
+    // 4. GTA RAGE Engine Clear-Coat Specular & Metallic Roughness
+    if ((gloss && gloss > 0) || (grain && grain > 0)) {
+      current = applyGTAMetallicSpecular(current, gloss ?? 0, grain ?? 0);
+    }
+
+    // 5. Color grading
     if (brightness !== 0 || contrast !== 0) {
       current = applyBrightnessContrast(current, brightness, contrast);
     }

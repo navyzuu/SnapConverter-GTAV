@@ -8,6 +8,8 @@ export interface EnhanceParams {
   contrast: number;
   noiseReduction: boolean;
   saturation: number;
+  gloss?: number;
+  grain?: number;
 }
 
 export interface EnhanceResult {

@@ -416,6 +416,60 @@ export function applyFSR_RCAS(imageData: ImageData, sharpness: number = 0.8): Im
   return createImageData(output, width, height);
 }
 
+// GTA V RAGE Engine Specular Clearcoat & Metallic Micro-Roughness.
+// Restores automotive clearcoat reflection falloff (Fresnel specular highlights)
+// and metallic flake micro-grain that prevents vehicles from looking like flat sanded primer.
+export function applyGTAMetallicSpecular(
+  imageData: ImageData,
+  glossLevel: number = 0, // 0 - 100
+  grainLevel: number = 0  // 0 - 100
+): ImageData {
+  if (glossLevel <= 0 && grainLevel <= 0) return imageData;
+  const { data, width, height } = imageData;
+  const output = new Uint8ClampedArray(data);
+
+  const glossFactor = glossLevel / 100;
+  const grainFactor = (grainLevel / 100) * 14;
+
+  let seed = 1337;
+  const rand = () => {
+    seed = (seed * 1664525 + 1013904223) | 0;
+    return (seed >>> 0) / 4294967296;
+  };
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+    // 1. Specular highlight curve: boosts reflections on car curves, metallic edges, and light sources
+    let specularDelta = 0;
+    if (glossFactor > 0 && luma > 0.18) {
+      const normLuma = (luma - 0.18) / 0.82;
+      specularDelta = Math.pow(normLuma, 1.8) * 55 * glossFactor;
+    }
+
+    // 2. Metallic micro-grain (RAGE vehicle clear-coat flakes)
+    // Applied in midtones to restore physical vehicle texture
+    let grainDelta = 0;
+    if (grainFactor > 0 && luma > 0.08 && luma < 0.94) {
+      const midtoneWeight = Math.sin(luma * Math.PI);
+      const flake = (rand() - 0.5) * 2;
+      grainDelta = flake * grainFactor * midtoneWeight;
+    }
+
+    const netDelta = specularDelta + grainDelta;
+    if (netDelta !== 0) {
+      output[i]     = Math.min(255, Math.max(0, Math.round(r + netDelta)));
+      output[i + 1] = Math.min(255, Math.max(0, Math.round(g + netDelta)));
+      output[i + 2] = Math.min(255, Math.max(0, Math.round(b + netDelta)));
+    }
+  }
+
+  return createImageData(output, width, height);
+}
+
 export function imageDataToOffscreenCanvas(imageData: ImageData): OffscreenCanvas {
   const canvas = new OffscreenCanvas(imageData.width, imageData.height);
   const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;

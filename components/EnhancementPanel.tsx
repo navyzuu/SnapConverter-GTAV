@@ -17,16 +17,18 @@ interface Params {
   noiseReduction: boolean;
   upscale: UpscaleOption;
   saturation: number;
+  gloss: number;
+  grain: number;
 }
 
 const PRESETS: Record<PresetKey, Params> = {
-  original:  { brightness: 0,   contrast: 0,  sharpen: 0,  noiseReduction: false, upscale: 1, saturation: 100 },
-  cinematic: { brightness: -5,  contrast: 25, sharpen: 5,  noiseReduction: false, upscale: 2, saturation: 95  },
-  vivid:     { brightness: 5,   contrast: 20, sharpen: 6,  noiseReduction: false, upscale: 2, saturation: 140 },
-  clean:     { brightness: 0,   contrast: 10, sharpen: 4,  noiseReduction: false, upscale: 2, saturation: 100 },
-  vinewood:  { brightness: 8,   contrast: 30, sharpen: 5,  noiseReduction: false, upscale: 2, saturation: 130 },
-  noir:      { brightness: -10, contrast: 45, sharpen: 7,  noiseReduction: false, upscale: 2, saturation: 0   },
-  desert:    { brightness: 12,  contrast: 20, sharpen: 4,  noiseReduction: false, upscale: 2, saturation: 115 },
+  original:  { brightness: 0,   contrast: 0,  sharpen: 0,  noiseReduction: false, upscale: 1, saturation: 100, gloss: 0,  grain: 0  },
+  cinematic: { brightness: -5,  contrast: 25, sharpen: 5,  noiseReduction: false, upscale: 2, saturation: 95,  gloss: 30, grain: 25 },
+  vivid:     { brightness: 5,   contrast: 20, sharpen: 6,  noiseReduction: false, upscale: 2, saturation: 140, gloss: 40, grain: 20 },
+  clean:     { brightness: 0,   contrast: 10, sharpen: 4,  noiseReduction: false, upscale: 2, saturation: 100, gloss: 20, grain: 15 },
+  vinewood:  { brightness: 8,   contrast: 30, sharpen: 5,  noiseReduction: false, upscale: 2, saturation: 130, gloss: 45, grain: 25 },
+  noir:      { brightness: -10, contrast: 45, sharpen: 7,  noiseReduction: false, upscale: 2, saturation: 0,   gloss: 35, grain: 30 },
+  desert:    { brightness: 12,  contrast: 20, sharpen: 4,  noiseReduction: false, upscale: 2, saturation: 115, gloss: 25, grain: 20 },
 };
 
 export type ExtendedEnhanceParams = Omit<EnhanceParams, 'imageData' | 'upscale'> & { upscale: UpscaleOption };
@@ -250,6 +252,32 @@ export default function EnhancementPanel({ onApply, isEnhancing, aiStatus }: Enh
               max={200}
               value={params.saturation}
               onChange={(e) => handleParamChange({ saturation: Number(e.target.value) })}
+              disabled={isEnhancing}
+            />
+          </div>
+
+          {/* Clearcoat Gloss (Pantulan Mengkilap) */}
+          <div className="enhancement-option">
+            <span style={labelStyle}>Clearcoat Gloss (Specular Reflection) — {params.gloss}%</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={params.gloss}
+              onChange={(e) => handleParamChange({ gloss: Number(e.target.value) })}
+              disabled={isEnhancing}
+            />
+          </div>
+
+          {/* Metallic Flake Grain (Tekstur Kasar GTA) */}
+          <div className="enhancement-option">
+            <span style={labelStyle}>Metallic Flake Grain (Roughness GTA) — {params.grain}%</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={params.grain}
+              onChange={(e) => handleParamChange({ grain: Number(e.target.value) })}
               disabled={isEnhancing}
             />
           </div>
