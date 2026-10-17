@@ -41,10 +41,57 @@ export default function DropZone({ onFiles, stage, progress, error, onReset }: D
   }, []);
 
   const handleDrop = useCallback(
-    (e: DragEvent<HTMLDivElement>) => {
+    async (e: DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       handleDragLeave();
-      const files = Array.from(e.dataTransfer.files);
+
+      const items = e.dataTransfer.items;
+      const files: File[] = [];
+
+      if (items && items.length > 0) {
+        const queue: FileSystemEntry[] = [];
+        for (let i = 0; i < items.length; i++) {
+          const entry = items[i].webkitGetAsEntry?.();
+          if (entry) queue.push(entry);
+        }
+
+        const readEntry = async (entry: FileSystemEntry): Promise<void> => {
+          if (entry.isFile) {
+            const fileEntry = entry as FileSystemFileEntry;
+            await new Promise<void>((resolve) => {
+              fileEntry.file((file) => {
+                files.push(file);
+                resolve();
+              }, () => resolve());
+            });
+          } else if (entry.isDirectory) {
+            const dirEntry = entry as FileSystemDirectoryEntry;
+            const dirReader = dirEntry.createReader();
+            const readEntriesBatch = (): Promise<FileSystemEntry[]> => {
+              return new Promise((resolve) => {
+                dirReader.readEntries((entries) => resolve(entries), () => resolve([]));
+              });
+            };
+
+            let batch: FileSystemEntry[];
+            do {
+              batch = await readEntriesBatch();
+              for (const child of batch) {
+                await readEntry(child);
+              }
+            } while (batch.length > 0);
+          }
+        };
+
+        for (const entry of queue) {
+          await readEntry(entry);
+        }
+      }
+
+      if (files.length === 0) {
+        files.push(...Array.from(e.dataTransfer.files));
+      }
+
       onFiles(files);
     },
     [handleDragLeave, onFiles]
@@ -138,7 +185,7 @@ export default function DropZone({ onFiles, stage, progress, error, onReset }: D
                 margin: '0.25rem 0 0',
               }}
             >
-              or click to browse — Snapmatic files only
+              Drop Snapmatic files or Rockstar profile folder — zero upload, 100% private
             </p>
           </div>
         </>

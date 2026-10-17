@@ -140,33 +140,52 @@ export function useFileProcessor() {
 
     setStage('converting');
     let completed = 0;
+    const errors: string[] = [];
 
-    const tasks = validFiles.map((file) => async (): Promise<FileEntry> => {
-      const buffer = await file.arrayBuffer();
-      const parseResult = parseSnapmatic(buffer);
-      const url = blobToObjectURL(parseResult.jpegBlob);
-      urlsToRevoke.current.push(url);
-      completed++;
-      setProgress(Math.round((completed / validFiles.length) * 100));
-      const baseName = file.name.replace(/\.[^.]+$/, '') || file.name;
-      const suggestedFilename = generateSnapmaticFilename(parseResult.metadata, file.name);
-      return {
-        id: `${file.name}-${file.lastModified}`,
-        originalFile: file,
-        rawBlob: parseResult.jpegBlob,
-        rawUrl: url,
-        enhancedBlob: null,
-        enhancedUrl: null,
-        name: baseName,
-        metadata: parseResult.metadata,
-        warnings: parseResult.warnings,
-        suggestedFilename,
-      };
+    const tasks = validFiles.map((file) => async (): Promise<FileEntry | null> => {
+      try {
+        const buffer = await file.arrayBuffer();
+        const parseResult = parseSnapmatic(buffer);
+        const url = blobToObjectURL(parseResult.jpegBlob);
+        urlsToRevoke.current.push(url);
+        completed++;
+        setProgress(Math.round((completed / validFiles.length) * 100));
+        const baseName = file.name.replace(/\.[^.]+$/, '') || file.name;
+        const suggestedFilename = generateSnapmaticFilename(parseResult.metadata, file.name);
+        return {
+          id: `${file.name}-${file.lastModified}-${Math.random().toString(36).substring(2, 7)}`,
+          originalFile: file,
+          rawBlob: parseResult.jpegBlob,
+          rawUrl: url,
+          enhancedBlob: null,
+          enhancedUrl: null,
+          name: baseName,
+          metadata: parseResult.metadata,
+          warnings: parseResult.warnings,
+          suggestedFilename,
+        };
+      } catch (err) {
+        completed++;
+        setProgress(Math.round((completed / validFiles.length) * 100));
+        errors.push(`${file.name}: ${err instanceof Error ? err.message : 'Invalid Snapmatic format'}`);
+        return null;
+      }
     });
 
     try {
-      const results = await runPool(tasks, CONCURRENCY);
-      setFiles(results);
+      const settled = await runPool(tasks, CONCURRENCY);
+      const successful = settled.filter((item): item is FileEntry => item !== null);
+
+      if (successful.length === 0) {
+        setError(errors.join(' | ') || 'All selected files failed to parse.');
+        setStage('error');
+        return;
+      }
+
+      setFiles(successful);
+      if (errors.length > 0) {
+        setError(`Converted ${successful.length} of ${validFiles.length} files. Skipped corrupt files: ${errors.join(', ')}`);
+      }
       setStage('preview');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Conversion failed');

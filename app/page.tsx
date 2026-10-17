@@ -99,6 +99,33 @@ export default function Home() {
           </div>
         )}
 
+        {/* Warning notification banner if some files failed but others succeeded */}
+        {showConversion && error && (
+          <div
+            style={{
+              padding: '0.75rem 1rem',
+              marginBottom: '1.5rem',
+              background: 'rgba(255, 75, 75, 0.1)',
+              border: '1px solid var(--accent-2)',
+              color: 'var(--accent-2)',
+              fontSize: '0.8rem',
+              fontFamily: 'var(--font-space-mono), monospace',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <span>⚠ {error}</span>
+            <button
+              onClick={() => {}}
+              className="btn-secondary"
+              style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem' }}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* Conversion Panel */}
         {showConversion && files.length > 0 && (
           <ConversionPanel
