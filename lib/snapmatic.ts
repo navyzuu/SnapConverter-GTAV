@@ -1,6 +1,7 @@
 export const JPEG_MAGIC = new Uint8Array([0xff, 0xd8, 0xff]);
 export const JPEG_EOI = new Uint8Array([0xff, 0xd9]);
 export const SNAPMATIC_STANDARD_HEADER_SIZE = 292;
+export const SNAPMATIC_CONSOLE_HEADER_SIZE = 512;
 
 export interface SnapmaticCoordinates {
   x: number;
@@ -198,6 +199,14 @@ export function parseSnapmatic(buffer: ArrayBuffer): SnapmaticParseResult {
   ) {
     startOffset = SNAPMATIC_STANDARD_HEADER_SIZE;
     format = 'pc';
+  } else if (
+    bytes.length > SNAPMATIC_CONSOLE_HEADER_SIZE + 3 &&
+    bytes[SNAPMATIC_CONSOLE_HEADER_SIZE] === JPEG_MAGIC[0] &&
+    bytes[SNAPMATIC_CONSOLE_HEADER_SIZE + 1] === JPEG_MAGIC[1] &&
+    bytes[SNAPMATIC_CONSOLE_HEADER_SIZE + 2] === JPEG_MAGIC[2]
+  ) {
+    startOffset = SNAPMATIC_CONSOLE_HEADER_SIZE;
+    format = 'console';
   } else {
     // Fallback scan first 2048 bytes
     const searchLimit = Math.min(bytes.length - 3, 2048);
@@ -208,7 +217,7 @@ export function parseSnapmatic(buffer: ArrayBuffer): SnapmaticParseResult {
         bytes[i + 2] === JPEG_MAGIC[2]
       ) {
         startOffset = i;
-        format = i === SNAPMATIC_STANDARD_HEADER_SIZE ? 'pc' : 'console';
+        format = i === SNAPMATIC_STANDARD_HEADER_SIZE ? 'pc' : i === SNAPMATIC_CONSOLE_HEADER_SIZE ? 'console' : 'unknown';
         break;
       }
     }

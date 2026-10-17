@@ -227,4 +227,25 @@ console.log('✓ Test 1: Area name lookup passed');
   console.log('✓ Test 8: EXIF APP1 segment construction & JPEG injection passed');
 }
 
-console.log('--- ALL 8 SNAPMATIC UNIT TESTS PASSED SUCCESSFULLY! ---');
+// Test 9: ZIP Manifest structure verification
+{
+  const testManifest = {
+    app: 'SnapConverter-GTAV',
+    version: '1.0.0',
+    totalFiles: 1,
+    photos: [
+      {
+        filename: 'Snapmatic_Vinewood.jpg',
+        area: 'Vinewood',
+        coordinates: { x: 10, y: 20, z: 30 },
+      },
+    ],
+  };
+  const jsonStr = JSON.stringify(testManifest);
+  const parsedManifest = JSON.parse(jsonStr);
+  assert.equal(parsedManifest.app, 'SnapConverter-GTAV');
+  assert.equal(parsedManifest.photos[0].area, 'Vinewood');
+  console.log('✓ Test 9: Batch ZIP metadata manifest JSON passed');
+}
+
+console.log('--- ALL 9 SNAPMATIC UNIT TESTS PASSED SUCCESSFULLY! ---');

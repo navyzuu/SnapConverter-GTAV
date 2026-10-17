@@ -295,6 +295,14 @@ export function useFileProcessor() {
     const JSZip = (await import('jszip')).default;
     const zip = new JSZip();
 
+    const manifest = {
+      app: 'SnapConverter-GTAV',
+      version: '1.0.0',
+      exportedAt: new Date().toISOString(),
+      totalFiles: files.length,
+      photos: [] as Record<string, unknown>[],
+    };
+
     for (const f of files) {
       const sourceBlob = f.enhancedBlob ?? f.rawBlob;
       let finalBlob = sourceBlob;
@@ -315,7 +323,24 @@ export function useFileProcessor() {
         filename = f.enhancedBlob ? `${base}_enhanced.jpg` : `${base}.jpg`;
       }
       zip.file(filename, finalBlob);
+
+      manifest.photos.push({
+        filename,
+        originalSnapmatic: f.originalFile.name,
+        area: f.metadata?.areaName || f.metadata?.area || 'Unknown',
+        coordinates: f.metadata?.loc || null,
+        timestamp: f.metadata?.createdAt?.toISOString() || null,
+        title: f.metadata?.title || null,
+        description: f.metadata?.description || null,
+        isSelfie: f.metadata?.isSelfie || false,
+        isDirector: f.metadata?.isDirector || false,
+        players: f.metadata?.players || [],
+      });
     }
+
+    // Embed metadata manifest JSON into ZIP
+    zip.file('snapmatic_manifest.json', JSON.stringify(manifest, null, 2));
+
     const content = await zip.generateAsync({ type: 'blob' });
     const url = URL.createObjectURL(content);
     const a = document.createElement('a');
@@ -328,6 +353,8 @@ export function useFileProcessor() {
 
   const reset = useCallback(() => {
     revokeAll();
+    terminateWorker();
+    terminateEsrganWorker();
     setFiles([]);
     setError(null);
     setProgress(0);
