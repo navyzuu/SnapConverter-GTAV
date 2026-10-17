@@ -295,4 +295,15 @@ console.log('✓ Test 1: Area name lookup passed');
   }
 }
 
-console.log('--- ALL 11 SNAPMATIC UNIT TESTS PASSED SUCCESSFULLY! ---');
+// Test 12: Real-ESRGAN General Photo v3 ONNX model verification
+{
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const modelPath = path.resolve('public', 'models', 'realesrgan-general-4x.onnx');
+  assert(fs.existsSync(modelPath), 'realesrgan-general-4x.onnx should exist in public/models/');
+  const stats = fs.statSync(modelPath);
+  assert(stats.size > 4000000, 'Model file should be around 4.8MB');
+  console.log('✓ Test 12: Real-ESRGAN General Photo v3 ONNX model verified (~4.8MB)');
+}
+
+console.log('--- ALL 12 SNAPMATIC UNIT TESTS PASSED SUCCESSFULLY! ---');

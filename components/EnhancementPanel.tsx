@@ -172,15 +172,15 @@ export default function EnhancementPanel({ onApply, isEnhancing, aiStatus }: Enh
                 className={`btn-secondary ${params.upscale === 'ai' ? 'active' : ''}`}
                 onClick={() => handleParamChange({ upscale: 'ai' })}
                 disabled={isEnhancing}
-                title="Real-ESRGAN Anime model (smooth cel-shading)"
+                title="Real-ESRGAN General Photo v3 (Tencent ARC photorealistic model)"
                 style={{ fontSize: '0.7rem', padding: '0.35rem 0.6rem' }}
               >
-                AI 4x (Anime)
+                AI 4x (Photo)
               </button>
             </div>
             {params.upscale === 'ai' ? (
               <p style={{ ...labelStyle, marginTop: '0.4rem', marginBottom: 0, color: 'var(--accent-1)' }}>
-                {aiStatus ?? 'Real-ESRGAN Anime: smooths flat gradients and enhances outlines.'}
+                {aiStatus ?? 'Real-ESRGAN Photo v3: Tencent neural network trained on real-world photos & textures.'}
               </p>
             ) : (
               <p style={{ ...labelStyle, marginTop: '0.4rem', marginBottom: 0, color: 'var(--text-muted)', fontSize: '0.65rem' }}>

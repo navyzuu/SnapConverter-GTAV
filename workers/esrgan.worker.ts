@@ -15,7 +15,7 @@ import * as ort from 'onnxruntime-web';
 // All inference stays 100% local — nothing leaves the browser.
 ort.env.wasm.wasmPaths = '/onnx/';
 
-const MODEL_URL = '/models/realesrgan-anime-4x.onnx';
+const MODEL_URL = '/models/realesrgan-general-4x.onnx';
 
 // Tiling constants — balance between memory usage and tile-seam quality
 const TILE    = 256; // input patch size (256×256)
@@ -27,7 +27,7 @@ const SCALE   = 4;
 
 const DB_NAME  = 'snapconvert-esrgan';
 const DB_STORE = 'models';
-const DB_KEY   = 'realesrgan-anime-4x-v1';
+const DB_KEY   = 'realesrgan-general-4x-v1';
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -70,17 +70,16 @@ async function getSession(): Promise<ort.InferenceSession> {
   let modelData = await loadFromCache();
 
   if (!modelData) {
-    post({ type: 'status', message: 'Downloading model (~5MB, cached after first use)...' });
+    post({ type: 'status', message: 'Downloading Real-ESRGAN Photo model (~4.8MB, cached after first use)...' });
     const res = await fetch(MODEL_URL);
     if (!res.ok) throw new Error(
-      `Model not found. Place realesrgan-anime-4x.onnx in public/models/ ` +
-      `(see workers/esrgan.worker.ts for download instructions).`
+      `Model not found. Place realesrgan-general-4x.onnx in public/models/`
     );
     modelData = await res.arrayBuffer();
     await saveToCache(modelData);
   }
 
-  post({ type: 'status', message: 'Loading model into ONNX Runtime...' });
+  post({ type: 'status', message: 'Loading Real-ESRGAN Photo model into WASM...' });
   session = await ort.InferenceSession.create(modelData, {
     executionProviders: ['wasm'],
     graphOptimizationLevel: 'all',
