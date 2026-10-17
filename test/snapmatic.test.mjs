@@ -248,4 +248,30 @@ console.log('✓ Test 1: Area name lookup passed');
   console.log('✓ Test 9: Batch ZIP metadata manifest JSON passed');
 }
 
-console.log('--- ALL 9 SNAPMATIC UNIT TESTS PASSED SUCCESSFULLY! ---');
+// Test 10: Luminance-based Texture Clarity Sharpening
+{
+  const { applyLuminanceSharpen } = await import('../lib/imageUtils.ts');
+  const w = 4;
+  const h = 4;
+  const raw = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < raw.length; i += 4) {
+    raw[i] = 128;
+    raw[i + 1] = 128;
+    raw[i + 2] = 128;
+    raw[i + 3] = 255;
+  }
+  // Put a high contrast pixel in the center
+  raw[5 * 4] = 220;
+  raw[5 * 4 + 1] = 220;
+  raw[5 * 4 + 2] = 220;
+
+  const imgData = { data: raw, width: w, height: h };
+  const sharpened = applyLuminanceSharpen(imgData, 1.0, 1);
+  assert.equal(sharpened.width, w);
+  assert.equal(sharpened.height, h);
+  // Center high-contrast pixel should have increased contrast
+  assert(sharpened.data[5 * 4] >= 220);
+  console.log('✓ Test 10: Pure fidelity luminance texture clarity sharpening passed');
+}
+
+console.log('--- ALL 10 SNAPMATIC UNIT TESTS PASSED SUCCESSFULLY! ---');

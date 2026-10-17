@@ -1,3 +1,11 @@
+// Cross-runtime ImageData factory (browser DOM, Web Worker, and Node.js unit tests)
+export function createImageData(data: Uint8ClampedArray, width: number, height: number): ImageData {
+  if (typeof ImageData !== 'undefined') {
+    return new ImageData(new Uint8ClampedArray(data.buffer as ArrayBuffer, data.byteOffset, data.length), width, height);
+  }
+  return { data, width, height, colorSpace: 'srgb' } as unknown as ImageData;
+}
+
 // JPEG DCT deblocking: targets 8x8 block boundaries with a 4-pixel-wide smooth band.
 // Pixels closer to the boundary get stronger smoothing; real edges (diff >= 28) are skipped.
 export function applyJpegDeblock(imageData: ImageData, strength: number): ImageData {
@@ -55,7 +63,7 @@ export function applyJpegDeblock(imageData: ImageData, strength: number): ImageD
     }
   }
 
-  return new ImageData(out, width, height);
+  return createImageData(out, width, height);
 }
 
 // Tight bilateral filter: only blends pixels with very similar color (colorSigma=8–12).
@@ -93,7 +101,7 @@ export function applyBilateralFilter(
       output[ci + 3] = data[ci + 3];
     }
   }
-  return new ImageData(output, width, height);
+  return createImageData(output, width, height);
 }
 
 export function stepUpscale(
@@ -160,7 +168,7 @@ export function applySharpen(imageData: ImageData, level: number): ImageData {
     }
   }
 
-  return new ImageData(output, width, height);
+  return createImageData(output, width, height);
 }
 
 export function applyBrightnessContrast(
@@ -179,7 +187,7 @@ export function applyBrightnessContrast(
     output[i + 3] = data[i + 3];
   }
 
-  return new ImageData(output, width, height);
+  return createImageData(output, width, height);
 }
 
 export function applyGaussianBlur(imageData: ImageData): ImageData {
@@ -219,7 +227,7 @@ export function applyGaussianBlur(imageData: ImageData): ImageData {
       }
     }
   }
-  return new ImageData(output, width, height);
+  return createImageData(output, width, height);
 }
 
 // Multi-pass Gaussian for stronger denoising
@@ -253,60 +261,77 @@ export function applyUnsharpMask(
     }
     output[i + 3] = data[i + 3];
   }
-  return new ImageData(output, width, height);
+  return createImageData(output, width, height);
 }
 
-// Diagonal anti-aliasing via Sobel gradient angle detection.
-//
-// For each pixel, computes the luminance Sobel gradient direction:
-//   - Flat (mag < 15): skip — no edge here.
-//   - Near-horizontal (angle 75°–105°) or near-vertical (0°–15°, 165°–180°): skip —
-//     these are clean straight edges that should stay sharp.
-//   - Diagonal zone (15°–75° and 105°–165°): apply Gaussian 3×3 at `strength` —
-//     this is where staircase aliasing from GTA V's low-res rendering lives.
-//
-// Result: staircase steps on diagonal lines are softened; horizontal/vertical edges
-// and flat regions are completely untouched.
-export function applyDiagonalSmooth(imageData: ImageData, strength: number = 0.5): ImageData {
+// Luminance-preserving High-Pass Texture Clarity filter.
+// Operates strictly on luminance to prevent chroma ringing / color drift.
+// Enhances micro-textures (asphalt, reflections, metallic paint, fabric, skin grain)
+// without smoothing or generating cartoon-like flat surfaces.
+export function applyLuminanceSharpen(
+  imageData: ImageData,
+  amount: number,
+  radius: number = 1
+): ImageData {
+  if (amount <= 0) return imageData;
   const { data, width, height } = imageData;
-  const out = new Uint8ClampedArray(data);
+  const output = new Uint8ClampedArray(data);
 
-  for (let y = 1; y < height - 1; y++) {
-    for (let x = 1; x < width - 1; x++) {
-      const ci = (y * width + x) * 4;
+  // 1. Extract luminance map
+  const lum = new Float32Array(width * height);
+  for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+    lum[j] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+  }
 
-      const tlI = ((y-1)*width+(x-1))*4, tcI = ((y-1)*width+x)*4, trI = ((y-1)*width+(x+1))*4;
-      const mlI = (y*width+(x-1))*4,                               mrI = (y*width+(x+1))*4;
-      const blI = ((y+1)*width+(x-1))*4, bcI = ((y+1)*width+x)*4, brI = ((y+1)*width+(x+1))*4;
-
-      const L = (i: number) => 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
-      const tl = L(tlI), tc = L(tcI), tr = L(trI);
-      const ml = L(mlI),               mr = L(mrI);
-      const bl = L(blI), bc = L(bcI), br = L(brI);
-
-      const gx = (tr + 2*mr + br) - (tl + 2*ml + bl);
-      const gy = (bl + 2*bc + br) - (tl + 2*tc + tr);
-      const mag = Math.sqrt(gx*gx + gy*gy);
-
-      if (mag < 15) continue;
-
-      const angle = Math.abs(Math.atan2(gy, gx) * 180 / Math.PI);
-      // Keep clean horizontal and vertical edges sharp; smooth everything in between.
-      if ((angle >= 75 && angle <= 105) || angle <= 15 || angle >= 165) continue;
-
-      for (let c = 0; c < 3; c++) {
-        const v = data[ci + c];
-        const blur = (
-          data[tlI+c] + 2*data[tcI+c] + data[trI+c] +
-          2*data[mlI+c] + 4*v + 2*data[mrI+c] +
-          data[blI+c] + 2*data[bcI+c] + data[brI+c]
-        ) / 16;
-        out[ci + c] = Math.round(v * (1 - strength) + blur * strength);
+  // 2. Separable box blur for high-pass baseline
+  const blurredH = new Float32Array(width * height);
+  for (let y = 0; y < height; y++) {
+    const rowOffset = y * width;
+    for (let x = 0; x < width; x++) {
+      let sum = 0;
+      let count = 0;
+      for (let dx = -radius; dx <= radius; dx++) {
+        const nx = x + dx;
+        if (nx >= 0 && nx < width) {
+          sum += lum[rowOffset + nx];
+          count++;
+        }
       }
+      blurredH[rowOffset + x] = sum / count;
     }
   }
 
-  return new ImageData(out, width, height);
+  const blurredV = new Float32Array(width * height);
+  for (let x = 0; x < width; x++) {
+    for (let y = 0; y < height; y++) {
+      let sum = 0;
+      let count = 0;
+      for (let dy = -radius; dy <= radius; dy++) {
+        const ny = y + dy;
+        if (ny >= 0 && ny < height) {
+          sum += blurredH[ny * width + x];
+          count++;
+        }
+      }
+      blurredV[y * width + x] = sum / count;
+    }
+  }
+
+  // 3. High-pass differential sharpening
+  for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+    const origL = lum[j];
+    const diff = origL - blurredV[j];
+
+    // Filter out subtle noise floor (< 1.5) but sharpen distinct edges and micro-textures
+    if (Math.abs(diff) >= 1.5) {
+      const delta = diff * amount;
+      output[i]     = Math.min(255, Math.max(0, data[i]     + delta));
+      output[i + 1] = Math.min(255, Math.max(0, data[i + 1] + delta));
+      output[i + 2] = Math.min(255, Math.max(0, data[i + 2] + delta));
+    }
+  }
+
+  return createImageData(output, width, height);
 }
 
 export function imageDataToOffscreenCanvas(imageData: ImageData): OffscreenCanvas {

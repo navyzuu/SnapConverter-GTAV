@@ -2,8 +2,7 @@
 
 import {
   applyJpegDeblock,
-  applyDiagonalSmooth,
-  applyUnsharpMask,
+  applyLuminanceSharpen,
   applyBrightnessContrast,
   stepUpscale,
   imageDataToOffscreenCanvas,
@@ -28,37 +27,29 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
   try {
     let current = imageData;
 
+    // 1. Optional subtle JPEG deblock ONLY if noise reduction is explicitly enabled
     if (noiseReduction) {
-      current = applyJpegDeblock(current, 1.0);
+      current = applyJpegDeblock(current, 0.7);
     }
 
-    if (sharpen > 0) {
-      const amount = 0.6 + (sharpen / 10) * 1.8;
-      const blurPasses = sharpen <= 4 ? 1 : 2;
-      const threshold = Math.max(8, 18 - sharpen);
-      current = applyUnsharpMask(current, amount, blurPasses, threshold);
-    }
-
-    // Diagonal anti-aliasing: uses Sobel gradient angle to target staircase on diagonal
-    // edges (15°–75° and 105°–165°). Near-horizontal and near-vertical edges are skipped
-    // entirely so they stay crisp. Runs after sharpen so unsharp mask doesn't undo it.
-    // Applies to any active enhancement; skipped for "Original" (all defaults).
-    const anyEnhancement = noiseReduction || upscale > 1 || sharpen > 0;
-    if (anyEnhancement) {
-      const aaStrength = noiseReduction ? 0.5 : 0.35;
-      current = applyDiagonalSmooth(current, aaStrength);
-      if (noiseReduction) {
-        // Second pass for Clean preset — accumulates further step reduction
-        current = applyDiagonalSmooth(current, aaStrength);
-      }
-    }
-
+    // 2. High-precision progressive step upscale FIRST
     if (upscale > 1) {
       const canvas = imageDataToOffscreenCanvas(current);
       const upscaled = stepUpscale(canvas, upscale as 2 | 4 | 8);
       current = offscreenCanvasToImageData(upscaled);
     }
 
+    // 3. Pure Fidelity Luminance Sharpening: restores micro-contrast directly at target resolution
+    // No cartoon smoothing, no pastel filter.
+    const effectiveSharpen = sharpen > 0 
+      ? (0.4 + (sharpen / 10) * 1.6) 
+      : (upscale > 1 ? 0.6 : 0);
+
+    if (effectiveSharpen > 0) {
+      current = applyLuminanceSharpen(current, effectiveSharpen, upscale > 1 ? 2 : 1);
+    }
+
+    // 4. Color grading
     if (brightness !== 0 || contrast !== 0) {
       current = applyBrightnessContrast(current, brightness, contrast);
     }

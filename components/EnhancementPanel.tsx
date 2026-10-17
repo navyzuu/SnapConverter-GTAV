@@ -21,12 +21,12 @@ interface Params {
 
 const PRESETS: Record<PresetKey, Params> = {
   original:  { brightness: 0,   contrast: 0,  sharpen: 0,  noiseReduction: false, upscale: 1, saturation: 100 },
-  cinematic: { brightness: -8,  contrast: 40, sharpen: 7,  noiseReduction: false, upscale: 2, saturation: 90  },
-  vivid:     { brightness: 8,   contrast: 25, sharpen: 9,  noiseReduction: false, upscale: 2, saturation: 155 },
-  clean:     { brightness: 3,   contrast: 8,  sharpen: 4,  noiseReduction: true,  upscale: 2, saturation: 100 },
-  vinewood:  { brightness: 10,  contrast: 35, sharpen: 6,  noiseReduction: true,  upscale: 2, saturation: 135 },
-  noir:      { brightness: -12, contrast: 50, sharpen: 8,  noiseReduction: true,  upscale: 2, saturation: 0   },
-  desert:    { brightness: 15,  contrast: 20, sharpen: 5,  noiseReduction: false, upscale: 2, saturation: 120 },
+  cinematic: { brightness: -5,  contrast: 25, sharpen: 5,  noiseReduction: false, upscale: 2, saturation: 95  },
+  vivid:     { brightness: 5,   contrast: 20, sharpen: 6,  noiseReduction: false, upscale: 2, saturation: 140 },
+  clean:     { brightness: 0,   contrast: 10, sharpen: 4,  noiseReduction: false, upscale: 2, saturation: 100 },
+  vinewood:  { brightness: 8,   contrast: 30, sharpen: 5,  noiseReduction: false, upscale: 2, saturation: 130 },
+  noir:      { brightness: -10, contrast: 45, sharpen: 7,  noiseReduction: false, upscale: 2, saturation: 0   },
+  desert:    { brightness: 12,  contrast: 20, sharpen: 4,  noiseReduction: false, upscale: 2, saturation: 115 },
 };
 
 export type ExtendedEnhanceParams = Omit<EnhanceParams, 'imageData' | 'upscale'> & { upscale: UpscaleOption };
@@ -155,37 +155,43 @@ export default function EnhancementPanel({ onApply, isEnhancing, aiStatus }: Enh
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {/* Upscale */}
           <div className="enhancement-option">
-            <span style={labelStyle}>Upscale</span>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span style={labelStyle}>Upscale Mode (Pure Fidelity)</span>
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
               {([1, 2, 4, 8] as UpscaleFactor[]).map((v) => (
                 <button
                   key={v}
                   className={`btn-secondary ${params.upscale === v ? 'active' : ''}`}
                   onClick={() => handleParamChange({ upscale: v })}
                   disabled={isEnhancing}
+                  style={{ fontSize: '0.7rem', padding: '0.35rem 0.6rem' }}
                 >
-                  {v}x
+                  {v === 1 ? '1x (Raw)' : `${v}x Pure`}
                 </button>
               ))}
               <button
                 className={`btn-secondary ${params.upscale === 'ai' ? 'active' : ''}`}
                 onClick={() => handleParamChange({ upscale: 'ai' })}
                 disabled={isEnhancing}
-                title="Real-ESRGAN-anime — slower but removes staircase aliasing"
+                title="Real-ESRGAN Anime model (smooth cel-shading)"
+                style={{ fontSize: '0.7rem', padding: '0.35rem 0.6rem' }}
               >
-                AI 4x
+                AI 4x (Anime)
               </button>
             </div>
-            {params.upscale === 'ai' && (
+            {params.upscale === 'ai' ? (
               <p style={{ ...labelStyle, marginTop: '0.4rem', marginBottom: 0, color: 'var(--accent-1)' }}>
-                {aiStatus ?? 'First run downloads model (~5MB) and caches it.'}
+                {aiStatus ?? 'Real-ESRGAN Anime: smooths flat gradients and enhances outlines.'}
+              </p>
+            ) : (
+              <p style={{ ...labelStyle, marginTop: '0.4rem', marginBottom: 0, color: 'var(--text-muted)', fontSize: '0.65rem' }}>
+                Pure Fidelity: Upscales resolution while preserving natural grain, vehicle reflections, and asphalt texture.
               </p>
             )}
           </div>
 
-          {/* Sharpen */}
+          {/* Sharpen / Texture Clarity */}
           <div className="enhancement-option">
-            <span style={labelStyle}>Sharpen — {params.sharpen}</span>
+            <span style={labelStyle}>Texture Clarity (Sharpen) — {params.sharpen}</span>
             <input
               type="range"
               min={0}
