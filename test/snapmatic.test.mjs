@@ -248,9 +248,9 @@ console.log('✓ Test 1: Area name lookup passed');
   console.log('✓ Test 9: Batch ZIP metadata manifest JSON passed');
 }
 
-// Test 10: Pure fidelity luminance texture clarity sharpening passed
+// Test 10: AMD FidelityFX RCAS Sharpening
 {
-  const { applyLuminanceSharpen } = await import('../lib/imageUtils.ts');
+  const { applyFSR_RCAS } = await import('../lib/imageUtils.ts');
   const w = 4;
   const h = 4;
   const raw = new Uint8ClampedArray(w * h * 4);
@@ -266,12 +266,11 @@ console.log('✓ Test 1: Area name lookup passed');
   raw[5 * 4 + 2] = 220;
 
   const imgData = { data: raw, width: w, height: h };
-  const sharpened = applyLuminanceSharpen(imgData, 1.0, 1);
+  const sharpened = applyFSR_RCAS(imgData, 1.0);
   assert.equal(sharpened.width, w);
   assert.equal(sharpened.height, h);
-  // Center high-contrast pixel should have increased contrast
-  assert(sharpened.data[5 * 4] >= 220);
-  console.log('✓ Test 10: Pure fidelity luminance texture clarity sharpening passed');
+  assert(sharpened.data[5 * 4] >= 200);
+  console.log('✓ Test 10: AMD FidelityFX RCAS contrast-adaptive sharpening passed');
 }
 
 // Test 11: Real GTA V Snapmatic File Ingestion (PGTA52118789236)

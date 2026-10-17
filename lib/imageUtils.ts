@@ -334,6 +334,88 @@ export function applyLuminanceSharpen(
   return createImageData(output, width, height);
 }
 
+// AMD FidelityFX Robust Contrast Adaptive Sharpening (RCAS).
+// Standard game-engine spatial reconstruction filter (MIT License / AMD).
+// Analyzes 5-tap neighborhood (Center, North, South, West, East),
+// bounds sharpening to local contrast limits, and employs a noise detector
+// to avoid noise amplification. Does NOT alter color, does NOT hallucinate pixels,
+// and does NOT smear or smooth faces/textures into cartoon plastic.
+export function applyFSR_RCAS(imageData: ImageData, sharpness: number = 0.8): ImageData {
+  const { data, width, height } = imageData;
+  const output = new Uint8ClampedArray(data);
+  const FSR_RCAS_LIMIT = 0.1875; // AMD FSR 1.0 limit
+
+  for (let y = 1; y < height - 1; y++) {
+    const rowOffset = y * width;
+    const upOffset = (y - 1) * width;
+    const downOffset = (y + 1) * width;
+
+    for (let x = 1; x < width - 1; x++) {
+      const ci = (rowOffset + x) * 4;
+      const bi = (upOffset + x) * 4;
+      const di = (rowOffset + (x - 1)) * 4;
+      const fi = (rowOffset + (x + 1)) * 4;
+      const hi = (downOffset + x) * 4;
+
+      const eR = data[ci] / 255,   eG = data[ci + 1] / 255,   eB = data[ci + 2] / 255;
+      const bR = data[bi] / 255,   bG = data[bi + 1] / 255,   bB = data[bi + 2] / 255;
+      const dR = data[di] / 255,   dG = data[di + 1] / 255,   dB = data[di + 2] / 255;
+      const fR = data[fi] / 255,   fG = data[fi + 1] / 255,   fB = data[fi + 2] / 255;
+      const hR = data[hi] / 255,   hG = data[hi + 1] / 255,   hB = data[hi + 2] / 255;
+
+      // Luma
+      const bL = bB * 0.5 + (bR * 0.5 + bG);
+      const dL = dB * 0.5 + (dR * 0.5 + dG);
+      const eL = eB * 0.5 + (eR * 0.5 + eG);
+      const fL = fB * 0.5 + (fR * 0.5 + fG);
+      const hL = hB * 0.5 + (hR * 0.5 + hG);
+
+      // Noise detection
+      let nz = 0.25 * bL + 0.25 * dL + 0.25 * fL + 0.25 * hL - eL;
+      const maxL = Math.max(bL, dL, eL, fL, hL);
+      const minL = Math.min(bL, dL, eL, fL, hL);
+      const diffL = maxL - minL;
+      if (diffL > 0.0001) {
+        nz = Math.min(1.0, Math.max(0.0, Math.abs(nz) / diffL));
+        nz = -0.5 * nz + 1.0;
+      } else {
+        nz = 1.0;
+      }
+
+      // Min & max of 4 ring neighbors
+      const mn4R = Math.min(bR, dR, fR, hR);
+      const mn4G = Math.min(bG, dG, fG, hG);
+      const mn4B = Math.min(bB, dB, fB, hB);
+      const mx4R = Math.max(bR, dR, fR, hR);
+      const mx4G = Math.max(bG, dG, fG, hG);
+      const mx4B = Math.max(bB, dB, fB, hB);
+
+      // Limiters (prevent ringing and halos)
+      const hitMinR = mx4R > 0.0001 ? Math.min(mn4R, eR) / (4.0 * mx4R) : 0;
+      const hitMinG = mx4G > 0.0001 ? Math.min(mn4G, eG) / (4.0 * mx4G) : 0;
+      const hitMinB = mx4B > 0.0001 ? Math.min(mn4B, eB) / (4.0 * mx4B) : 0;
+
+      const hitMaxR = (1.0 - Math.max(mx4R, eR)) / Math.max(0.0001, 4.0 * (1.0 - mn4R));
+      const hitMaxG = (1.0 - Math.max(mx4G, eG)) / Math.max(0.0001, 4.0 * (1.0 - mn4G));
+      const hitMaxB = (1.0 - Math.max(mx4B, eB)) / Math.max(0.0001, 4.0 * (1.0 - mn4B));
+
+      const lobeR = Math.max(-hitMinR, -hitMaxR);
+      const lobeG = Math.max(-hitMinG, -hitMaxG);
+      const lobeB = Math.max(-hitMinB, -hitMaxB);
+
+      let lobe = Math.max(-FSR_RCAS_LIMIT, Math.min(Math.max(lobeR, lobeG, lobeB), 0.0)) * sharpness;
+      lobe *= nz;
+
+      const rcpL = 1.0 / (4.0 * lobe + 1.0);
+      output[ci]     = Math.min(255, Math.max(0, Math.round(((lobe * (bR + dR + hR + fR) + eR) * rcpL) * 255)));
+      output[ci + 1] = Math.min(255, Math.max(0, Math.round(((lobe * (bG + dG + hG + fG) + eG) * rcpL) * 255)));
+      output[ci + 2] = Math.min(255, Math.max(0, Math.round(((lobe * (bB + dB + hB + fB) + eB) * rcpL) * 255)));
+    }
+  }
+
+  return createImageData(output, width, height);
+}
+
 export function imageDataToOffscreenCanvas(imageData: ImageData): OffscreenCanvas {
   const canvas = new OffscreenCanvas(imageData.width, imageData.height);
   const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;

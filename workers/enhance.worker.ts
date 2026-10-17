@@ -2,7 +2,7 @@
 
 import {
   applyJpegDeblock,
-  applyLuminanceSharpen,
+  applyFSR_RCAS,
   applyBrightnessContrast,
   stepUpscale,
   imageDataToOffscreenCanvas,
@@ -39,14 +39,14 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
       current = offscreenCanvasToImageData(upscaled);
     }
 
-    // 3. Pure Fidelity Luminance Sharpening: restores micro-contrast directly at target resolution
-    // No cartoon smoothing, no pastel filter.
-    const effectiveSharpen = sharpen > 0 
-      ? (0.4 + (sharpen / 10) * 1.6) 
-      : (upscale > 1 ? 0.6 : 0);
+    // 3. AMD FidelityFX RCAS (Robust Contrast Adaptive Sharpening)
+    // Runs at target resolution: restores crisp sub-pixel geometry & decals without cartoon smearing
+    const rcasSharpness = sharpen > 0 
+      ? Math.min(1.2, 0.4 + (sharpen / 10) * 0.8) 
+      : (upscale > 1 ? 0.75 : 0);
 
-    if (effectiveSharpen > 0) {
-      current = applyLuminanceSharpen(current, effectiveSharpen, upscale > 1 ? 2 : 1);
+    if (rcasSharpness > 0) {
+      current = applyFSR_RCAS(current, rcasSharpness);
     }
 
     // 4. Color grading
