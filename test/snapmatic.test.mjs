@@ -203,4 +203,28 @@ console.log('✓ Test 1: Area name lookup passed');
   console.log('✓ Test 7: Corrupt metadata resilience (graceful degradation) passed');
 }
 
-console.log('--- ALL 7 SNAPMATIC UNIT TESTS PASSED SUCCESSFULLY! ---');
+// Test 8: EXIF APP1 Injection
+{
+  const { injectExifIntoJpeg, buildExifApp1Segment } = await import('../lib/exif.ts');
+  const dummyJpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x11, 0x22, 0xff, 0xd9]);
+  const metadata = {
+    loc: { x: 120.5, y: -450.2, z: 25.0 },
+    area: 'VINE',
+    areaName: 'Vinewood',
+    createdAt: new Date('2024-05-22T10:30:00Z'),
+    isSelfie: true,
+  };
+
+  const segment = buildExifApp1Segment(metadata);
+  assert.equal(segment[0], 0xff);
+  assert.equal(segment[1], 0xe1); // APP1 marker
+
+  const withExif = injectExifIntoJpeg(dummyJpeg, metadata);
+  assert.equal(withExif[0], 0xff);
+  assert.equal(withExif[1], 0xd8); // SOI
+  assert.equal(withExif[2], 0xff);
+  assert.equal(withExif[3], 0xe1); // APP1 immediately follows SOI
+  console.log('✓ Test 8: EXIF APP1 segment construction & JPEG injection passed');
+}
+
+console.log('--- ALL 8 SNAPMATIC UNIT TESTS PASSED SUCCESSFULLY! ---');

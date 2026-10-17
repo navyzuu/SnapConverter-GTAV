@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import BeforeAfter from './BeforeAfter';
 import EnhancementPanel from './EnhancementPanel';
 import DownloadButton from './DownloadButton';
+import MetadataInspector from './MetadataInspector';
 import type { FileEntry, Stage } from '@/hooks/useFileProcessor';
 import type { ExtendedEnhanceParams } from './EnhancementPanel';
 
@@ -145,8 +146,13 @@ export default function ConversionPanel({
         <BeforeAfter beforeUrl={beforeUrl} afterUrl={afterUrl} />
       </div>
 
-      {/* Right: controls */}
+      {/* Right: controls & metadata */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <MetadataInspector
+          metadata={selected.metadata}
+          warnings={selected.warnings}
+          filename={selected.suggestedFilename || selected.name}
+        />
         <EnhancementPanel onApply={onApplyEnhancement} isEnhancing={isEnhancing} aiStatus={aiStatus} />
         <DownloadButton files={files} onDownload={onDownload} />
       </div>

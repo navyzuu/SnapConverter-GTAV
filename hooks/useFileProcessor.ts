@@ -7,6 +7,7 @@ import {
   blobToObjectURL,
 } from '@/lib/snapmatic';
 import type { SnapmaticMetadata } from '@/lib/snapmatic';
+import { injectExifIntoJpeg } from '@/lib/exif';
 import { enhance, terminateWorker } from '@/lib/enhance';
 import type { EnhanceParams, UpscaleFactor } from '@/lib/enhance';
 import { esrganEnhance, terminateEsrganWorker } from '@/lib/esrgan';
@@ -255,8 +256,21 @@ export function useFileProcessor() {
 
   const downloadSingle = useCallback(
     async (entry: FileEntry) => {
-      const blob = entry.enhancedBlob ?? entry.rawBlob;
-      const url = URL.createObjectURL(blob);
+      const sourceBlob = entry.enhancedBlob ?? entry.rawBlob;
+      let finalBlob = sourceBlob;
+
+      // Bake EXIF if metadata available
+      if (entry.metadata) {
+        try {
+          const arrayBuf = await sourceBlob.arrayBuffer();
+          const withExif = injectExifIntoJpeg(new Uint8Array(arrayBuf), entry.metadata);
+          finalBlob = new Blob([withExif.buffer as ArrayBuffer], { type: 'image/jpeg' });
+        } catch {
+          // Graceful fallback to original blob
+        }
+      }
+
+      const url = URL.createObjectURL(finalBlob);
       const a = document.createElement('a');
       a.href = url;
       if (entry.suggestedFilename) {
@@ -280,15 +294,28 @@ export function useFileProcessor() {
     }
     const JSZip = (await import('jszip')).default;
     const zip = new JSZip();
-    files.forEach((f) => {
-      const blob = f.enhancedBlob ?? f.rawBlob;
+
+    for (const f of files) {
+      const sourceBlob = f.enhancedBlob ?? f.rawBlob;
+      let finalBlob = sourceBlob;
+
+      if (f.metadata) {
+        try {
+          const buf = await sourceBlob.arrayBuffer();
+          const withExif = injectExifIntoJpeg(new Uint8Array(buf), f.metadata);
+          finalBlob = new Blob([withExif.buffer as ArrayBuffer], { type: 'image/jpeg' });
+        } catch {
+          // Fallback
+        }
+      }
+
       let filename = `${f.name}${f.enhancedBlob ? '_enhanced.jpg' : '_converted.jpg'}`;
       if (f.suggestedFilename) {
         const base = f.suggestedFilename.replace(/\.jpg$/i, '');
         filename = f.enhancedBlob ? `${base}_enhanced.jpg` : `${base}.jpg`;
       }
-      zip.file(filename, blob);
-    });
+      zip.file(filename, finalBlob);
+    }
     const content = await zip.generateAsync({ type: 'blob' });
     const url = URL.createObjectURL(content);
     const a = document.createElement('a');
