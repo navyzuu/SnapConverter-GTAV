@@ -1,3 +1,5 @@
+const path = require('path');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   async headers() {
@@ -14,6 +16,12 @@ const nextConfig = {
   },
   webpack(config) {
     config.experiments = { ...config.experiments, asyncWebAssembly: true };
+
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'onnxruntime-web': path.resolve(__dirname, 'node_modules/onnxruntime-web/dist/ort.wasm.min.js'),
+    };
+
     return config;
   },
 };

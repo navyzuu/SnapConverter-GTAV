@@ -1,7 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { extractJpegFromSnapmatic, blobToObjectURL } from '@/lib/snapmatic';
+import {
+  parseSnapmatic,
+  generateSnapmaticFilename,
+  blobToObjectURL,
+} from '@/lib/snapmatic';
+import type { SnapmaticMetadata } from '@/lib/snapmatic';
 import { enhance, terminateWorker } from '@/lib/enhance';
 import type { EnhanceParams, UpscaleFactor } from '@/lib/enhance';
 import { esrganEnhance, terminateEsrganWorker } from '@/lib/esrgan';
@@ -17,6 +22,9 @@ export interface FileEntry {
   enhancedBlob: Blob | null;
   enhancedUrl: string | null;
   name: string;
+  metadata?: SnapmaticMetadata;
+  warnings?: string[];
+  suggestedFilename?: string;
 }
 
 export interface ProcessorState {
@@ -135,20 +143,24 @@ export function useFileProcessor() {
 
     const tasks = validFiles.map((file) => async (): Promise<FileEntry> => {
       const buffer = await file.arrayBuffer();
-      const blob = extractJpegFromSnapmatic(buffer);
-      const url = blobToObjectURL(blob);
+      const parseResult = parseSnapmatic(buffer);
+      const url = blobToObjectURL(parseResult.jpegBlob);
       urlsToRevoke.current.push(url);
       completed++;
       setProgress(Math.round((completed / validFiles.length) * 100));
       const baseName = file.name.replace(/\.[^.]+$/, '') || file.name;
+      const suggestedFilename = generateSnapmaticFilename(parseResult.metadata, file.name);
       return {
         id: `${file.name}-${file.lastModified}`,
         originalFile: file,
-        rawBlob: blob,
+        rawBlob: parseResult.jpegBlob,
         rawUrl: url,
         enhancedBlob: null,
         enhancedUrl: null,
         name: baseName,
+        metadata: parseResult.metadata,
+        warnings: parseResult.warnings,
+        suggestedFilename,
       };
     });
 
@@ -225,11 +237,16 @@ export function useFileProcessor() {
   const downloadSingle = useCallback(
     async (entry: FileEntry) => {
       const blob = entry.enhancedBlob ?? entry.rawBlob;
-      const suffix = entry.enhancedBlob ? '_enhanced.jpg' : '_converted.jpg';
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${entry.name}${suffix}`;
+      if (entry.suggestedFilename) {
+        const base = entry.suggestedFilename.replace(/\.jpg$/i, '');
+        a.download = entry.enhancedBlob ? `${base}_enhanced.jpg` : `${base}.jpg`;
+      } else {
+        const suffix = entry.enhancedBlob ? '_enhanced.jpg' : '_converted.jpg';
+        a.download = `${entry.name}${suffix}`;
+      }
       a.click();
       URL.revokeObjectURL(url);
     },
@@ -246,8 +263,12 @@ export function useFileProcessor() {
     const zip = new JSZip();
     files.forEach((f) => {
       const blob = f.enhancedBlob ?? f.rawBlob;
-      const suffix = f.enhancedBlob ? '_enhanced.jpg' : '_converted.jpg';
-      zip.file(`${f.name}${suffix}`, blob);
+      let filename = `${f.name}${f.enhancedBlob ? '_enhanced.jpg' : '_converted.jpg'}`;
+      if (f.suggestedFilename) {
+        const base = f.suggestedFilename.replace(/\.jpg$/i, '');
+        filename = f.enhancedBlob ? `${base}_enhanced.jpg` : `${base}.jpg`;
+      }
+      zip.file(filename, blob);
     });
     const content = await zip.generateAsync({ type: 'blob' });
     const url = URL.createObjectURL(content);
