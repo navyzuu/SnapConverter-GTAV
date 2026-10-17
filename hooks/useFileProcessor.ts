@@ -206,9 +206,40 @@ export function useFileProcessor() {
 
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
-          let imageData = await imageDataFromBlob(file.rawBlob);
+          let imageData: ImageData;
 
-          if (isAi) {
+          if (params.upscale === 'gpu') {
+            setAiStatus('Accelerating via local NVIDIA RTX GPU (Real-ESRGAN x4plus)...');
+            const formData = new FormData();
+            formData.append('file', file.rawBlob, `${file.name}.jpg`);
+            formData.append('model', 'realesrgan-x4plus');
+
+            const res = await fetch('/api/enhance', {
+              method: 'POST',
+              body: formData,
+            });
+
+            if (!res.ok) {
+              const errJson = await res.json().catch(() => ({}));
+              throw new Error(errJson.error || `GPU upscaler failed with status ${res.status}`);
+            }
+
+            const enhancedBlob = await res.blob();
+            imageData = await imageDataFromBlob(enhancedBlob);
+
+            // Phase 2: apply color grading if needed
+            if (params.brightness !== 0 || params.contrast !== 0 || params.saturation !== 100) {
+              const canvasParams: EnhanceParams = {
+                ...params,
+                upscale: 1 as UpscaleFactor,
+                sharpen: 0,
+                imageData,
+              };
+              const canvasResult = await enhance(canvasParams);
+              imageData = canvasResult.imageData;
+            }
+          } else if (params.upscale === 'ai') {
+            imageData = await imageDataFromBlob(file.rawBlob);
             // Phase 1: ESRGAN 4x upscale
             const esrganResult = await esrganEnhance(imageData, {
               onProgress: (pct) => {
@@ -229,6 +260,7 @@ export function useFileProcessor() {
             const canvasResult = await enhance(canvasParams);
             imageData = canvasResult.imageData;
           } else {
+            imageData = await imageDataFromBlob(file.rawBlob);
             // Normal canvas-only path (upscale is a numeric UpscaleFactor here)
             const { upscale, ...restParams } = params;
             const result = await enhance({ ...restParams, upscale: upscale as UpscaleFactor, imageData });

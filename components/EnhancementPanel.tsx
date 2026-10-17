@@ -8,7 +8,7 @@ import type { EnhanceParams, UpscaleFactor } from '@/lib/enhance';
 gsap.registerPlugin(ScrollTrigger);
 
 type PresetKey = 'original' | 'cinematic' | 'vivid' | 'clean' | 'vinewood' | 'noir' | 'desert';
-export type UpscaleOption = UpscaleFactor | 'ai';
+export type UpscaleOption = UpscaleFactor | 'ai' | 'gpu';
 
 interface Params {
   brightness: number;
@@ -155,8 +155,17 @@ export default function EnhancementPanel({ onApply, isEnhancing, aiStatus }: Enh
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {/* Upscale */}
           <div className="enhancement-option">
-            <span style={labelStyle}>Upscale Mode (Pure Fidelity)</span>
+            <span style={labelStyle}>Upscale Engine</span>
             <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <button
+                className={`btn-secondary ${params.upscale === 'gpu' ? 'active' : ''}`}
+                onClick={() => handleParamChange({ upscale: 'gpu' })}
+                disabled={isEnhancing}
+                title="Tencent Real-ESRGAN x4plus 64MB Deep RRDBNet via local GPU / Vulkan (Flagship 4K)"
+                style={{ fontSize: '0.7rem', padding: '0.35rem 0.6rem', borderColor: 'var(--accent-1)', color: 'var(--accent-1)' }}
+              >
+                ⚡ RTX GPU 4x (Flagship)
+              </button>
               {([1, 2, 4, 8] as UpscaleFactor[]).map((v) => (
                 <button
                   key={v}
@@ -165,26 +174,30 @@ export default function EnhancementPanel({ onApply, isEnhancing, aiStatus }: Enh
                   disabled={isEnhancing}
                   style={{ fontSize: '0.7rem', padding: '0.35rem 0.6rem' }}
                 >
-                  {v === 1 ? '1x (Raw)' : `${v}x Pure`}
+                  {v === 1 ? '1x (Raw)' : `${v}x FSR`}
                 </button>
               ))}
               <button
                 className={`btn-secondary ${params.upscale === 'ai' ? 'active' : ''}`}
                 onClick={() => handleParamChange({ upscale: 'ai' })}
                 disabled={isEnhancing}
-                title="Real-ESRGAN General Photo v3 (Tencent ARC photorealistic model)"
+                title="Browser WASM neural network"
                 style={{ fontSize: '0.7rem', padding: '0.35rem 0.6rem' }}
               >
-                AI 4x (Photo)
+                WASM AI 4x
               </button>
             </div>
-            {params.upscale === 'ai' ? (
+            {params.upscale === 'gpu' ? (
               <p style={{ ...labelStyle, marginTop: '0.4rem', marginBottom: 0, color: 'var(--accent-1)' }}>
-                {aiStatus ?? 'Real-ESRGAN Photo v3: Tencent neural network trained on real-world photos & textures.'}
+                {aiStatus ?? 'Local RTX GPU Engine: 64MB deep RRDBNet network running directly on Vulkan (~2s).'}
+              </p>
+            ) : params.upscale === 'ai' ? (
+              <p style={{ ...labelStyle, marginTop: '0.4rem', marginBottom: 0, color: 'var(--accent-1)' }}>
+                {aiStatus ?? 'Browser WASM Model: runs inside CPU WebAssembly (~10s).'}
               </p>
             ) : (
               <p style={{ ...labelStyle, marginTop: '0.4rem', marginBottom: 0, color: 'var(--text-muted)', fontSize: '0.65rem' }}>
-                Pure Fidelity: Upscales resolution while preserving natural grain, vehicle reflections, and asphalt texture.
+                AMD FidelityFX FSR: Instant spatial reconstruction with contrast-adaptive sharpening.
               </p>
             )}
           </div>

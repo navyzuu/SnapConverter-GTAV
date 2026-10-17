@@ -294,7 +294,7 @@ console.log('✓ Test 1: Area name lookup passed');
   }
 }
 
-// Test 12: Real-ESRGAN General Photo v3 ONNX model verification
+// Test 12: Real-ESRGAN General Photo v3 ONNX model verified (~4.8MB)
 {
   const fs = await import('node:fs');
   const path = await import('node:path');
@@ -305,4 +305,13 @@ console.log('✓ Test 1: Area name lookup passed');
   console.log('✓ Test 12: Real-ESRGAN General Photo v3 ONNX model verified (~4.8MB)');
 }
 
-console.log('--- ALL 12 SNAPMATIC UNIT TESTS PASSED SUCCESSFULLY! ---');
+// Test 13: Local RTX GPU Real-ESRGAN Vulkan Binary verification
+{
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const exePath = path.resolve('tools', 'realesrgan', 'realesrgan-ncnn-vulkan.exe');
+  assert(fs.existsSync(exePath), 'realesrgan-ncnn-vulkan.exe should exist in tools/realesrgan/');
+  console.log('✓ Test 13: Local RTX GPU Vulkan binary verified');
+}
+
+console.log('--- ALL 13 SNAPMATIC UNIT TESTS PASSED SUCCESSFULLY! ---');

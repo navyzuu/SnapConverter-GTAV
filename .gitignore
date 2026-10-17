@@ -35,4 +35,7 @@ next-env.d.ts
 
 # orchestra / ai artifacts
 workspace/
+*.zip
+tools/
+
 
