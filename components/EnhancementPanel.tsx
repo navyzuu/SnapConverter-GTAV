@@ -7,7 +7,7 @@ import type { EnhanceParams, UpscaleFactor } from '@/lib/enhance';
 
 gsap.registerPlugin(ScrollTrigger);
 
-type PresetKey = 'original' | 'cinematic' | 'vivid' | 'clean';
+type PresetKey = 'original' | 'cinematic' | 'vivid' | 'clean' | 'vinewood' | 'noir' | 'desert';
 export type UpscaleOption = UpscaleFactor | 'ai';
 
 interface Params {
@@ -20,10 +20,13 @@ interface Params {
 }
 
 const PRESETS: Record<PresetKey, Params> = {
-  original:  { brightness: 0,  contrast: 0,  sharpen: 0,  noiseReduction: false, upscale: 1, saturation: 100 },
-  cinematic: { brightness: -8, contrast: 40, sharpen: 7,  noiseReduction: false, upscale: 2, saturation: 90  },
-  vivid:     { brightness: 8,  contrast: 25, sharpen: 9,  noiseReduction: false, upscale: 2, saturation: 155 },
-  clean:     { brightness: 3,  contrast: 8,  sharpen: 4,  noiseReduction: true,  upscale: 2, saturation: 100 },
+  original:  { brightness: 0,   contrast: 0,  sharpen: 0,  noiseReduction: false, upscale: 1, saturation: 100 },
+  cinematic: { brightness: -8,  contrast: 40, sharpen: 7,  noiseReduction: false, upscale: 2, saturation: 90  },
+  vivid:     { brightness: 8,   contrast: 25, sharpen: 9,  noiseReduction: false, upscale: 2, saturation: 155 },
+  clean:     { brightness: 3,   contrast: 8,  sharpen: 4,  noiseReduction: true,  upscale: 2, saturation: 100 },
+  vinewood:  { brightness: 10,  contrast: 35, sharpen: 6,  noiseReduction: true,  upscale: 2, saturation: 135 },
+  noir:      { brightness: -12, contrast: 50, sharpen: 8,  noiseReduction: true,  upscale: 2, saturation: 0   },
+  desert:    { brightness: 15,  contrast: 20, sharpen: 5,  noiseReduction: false, upscale: 2, saturation: 120 },
 };
 
 export type ExtendedEnhanceParams = Omit<EnhanceParams, 'imageData' | 'upscale'> & { upscale: UpscaleOption };
@@ -125,15 +128,16 @@ export default function EnhancementPanel({ onApply, isEnhancing, aiStatus }: Enh
       </p>
 
       {/* Preset buttons */}
-      <div className="enhancement-option" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+      <div className="enhancement-option" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '0.4rem', marginBottom: '1rem' }}>
         {(Object.keys(PRESETS) as PresetKey[]).map((key) => (
           <button
             key={key}
             className={`btn-secondary ${activePreset === key ? 'active' : ''}`}
             onClick={() => selectPreset(key)}
             disabled={isEnhancing}
+            style={{ padding: '0.4rem 0.6rem', textAlign: 'center', fontSize: '0.65rem' }}
           >
-            {key.charAt(0).toUpperCase() + key.slice(1)}
+            {key === 'vinewood' ? 'Sunset' : key === 'noir' ? 'LS Noir' : key === 'desert' ? 'Desert' : key.charAt(0).toUpperCase() + key.slice(1)}
           </button>
         ))}
       </div>
@@ -214,6 +218,19 @@ export default function EnhancementPanel({ onApply, isEnhancing, aiStatus }: Enh
               max={50}
               value={params.contrast}
               onChange={(e) => handleParamChange({ contrast: Number(e.target.value) })}
+              disabled={isEnhancing}
+            />
+          </div>
+
+          {/* Saturation */}
+          <div className="enhancement-option">
+            <span style={labelStyle}>Saturation — {params.saturation}%</span>
+            <input
+              type="range"
+              min={0}
+              max={200}
+              value={params.saturation}
+              onChange={(e) => handleParamChange({ saturation: Number(e.target.value) })}
               disabled={isEnhancing}
             />
           </div>
