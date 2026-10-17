@@ -39,6 +39,7 @@ export default function MetadataInspector({ metadata, warnings, filename }: Meta
     isMeme,
     title,
     description,
+    inGameTime,
   } = metadata;
 
   return (
@@ -104,6 +105,11 @@ export default function MetadataInspector({ metadata, warnings, filename }: Meta
           {createdAt && (
             <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem', display: 'block' }}>
               {createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+          )}
+          {inGameTime && (
+            <span style={{ color: 'var(--accent-1)', fontSize: '0.65rem', display: 'block', marginTop: '0.2rem' }}>
+              GTA CLOCK: {String(inGameTime.hour).padStart(2, '0')}:{String(inGameTime.minute).padStart(2, '0')}
             </span>
           )}
         </div>

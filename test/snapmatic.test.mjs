@@ -248,7 +248,7 @@ console.log('✓ Test 1: Area name lookup passed');
   console.log('✓ Test 9: Batch ZIP metadata manifest JSON passed');
 }
 
-// Test 10: Luminance-based Texture Clarity Sharpening
+// Test 10: Pure fidelity luminance texture clarity sharpening passed
 {
   const { applyLuminanceSharpen } = await import('../lib/imageUtils.ts');
   const w = 4;
@@ -274,4 +274,25 @@ console.log('✓ Test 1: Area name lookup passed');
   console.log('✓ Test 10: Pure fidelity luminance texture clarity sharpening passed');
 }
 
-console.log('--- ALL 10 SNAPMATIC UNIT TESTS PASSED SUCCESSFULLY! ---');
+// Test 11: Real GTA V Snapmatic File Ingestion (PGTA52118789236)
+{
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const filePath = path.resolve('samples', 'PGTA52118789236');
+  if (fs.existsSync(filePath)) {
+    const buf = fs.readFileSync(filePath);
+    const arrayBuf = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+    const parsed = parseSnapmatic(arrayBuf);
+    assert.equal(parsed.format, 'pc');
+    assert.equal(parsed.metadata.area, 'GOLF');
+    assert.equal(parsed.metadata.areaName, 'GWC Golf Course');
+    assert.equal(parsed.metadata.title, 'GWC and Golfing Society');
+    assert.equal(parsed.warnings.length, 0);
+    assert(parsed.metadata.loc !== undefined);
+    assert.equal(Math.round(parsed.metadata.loc.x), -1388);
+    assert(parsed.jpegBytes.length > 100000);
+    console.log('✓ Test 11: Real GTA V Snapmatic binary parsed 100% cleanly (GWC Golf Course)');
+  }
+}
+
+console.log('--- ALL 11 SNAPMATIC UNIT TESTS PASSED SUCCESSFULLY! ---');

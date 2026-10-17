@@ -9,12 +9,22 @@ export interface SnapmaticCoordinates {
   z: number;
 }
 
+export interface SnapmaticInGameTime {
+  hour: number;
+  minute: number;
+  second: number;
+  day: number;
+  month: number;
+  year: number;
+}
+
 export interface SnapmaticMetadata {
   loc?: SnapmaticCoordinates;
   area?: string;
   areaName?: string;
   createdAt?: Date;
   timestamp?: number;
+  inGameTime?: SnapmaticInGameTime;
   players?: string[];
   isSelfie?: boolean;
   isMugshot?: boolean;
@@ -250,57 +260,90 @@ export function parseSnapmatic(buffer: ArrayBuffer): SnapmaticParseResult {
   const jsonMarkerIdx = findSequence(bytes, MARKER_JSON, startOffset);
   if (jsonMarkerIdx !== -1 && jsonMarkerIdx + 8 < bytes.length) {
     try {
-      const lengthField = view.getInt32(jsonMarkerIdx + 4, true); // Little endian
-      let jsonBytes: Uint8Array | null = null;
+      const openBrace = bytes.indexOf(0x7b, jsonMarkerIdx); // '{'
+      if (openBrace !== -1) {
+        let depth = 0;
+        let inString = false;
+        let escape = false;
+        let jsonEnd = -1;
 
-      if (lengthField > 0 && jsonMarkerIdx + 8 + lengthField <= bytes.length) {
-        jsonBytes = bytes.subarray(jsonMarkerIdx + 8, jsonMarkerIdx + 8 + lengthField);
+        for (let i = openBrace; i < bytes.length; i++) {
+          const b = bytes[i];
+          if (escape) {
+            escape = false;
+            continue;
+          }
+          if (b === 0x5c) { // '\\'
+            escape = true;
+            continue;
+          }
+          if (b === 0x22) { // '\"'
+            inString = !inString;
+            continue;
+          }
+          if (!inString) {
+            if (b === 0x7b) depth++;
+            else if (b === 0x7d) {
+              depth--;
+              if (depth === 0) {
+                jsonEnd = i + 1;
+                break;
+              }
+            }
+          }
+        }
+
+        if (jsonEnd !== -1) {
+          const jsonBytes = bytes.subarray(openBrace, jsonEnd);
+          const jsonText = new TextDecoder('utf-8', { fatal: false }).decode(jsonBytes);
+          const parsed = JSON.parse(jsonText);
+          metadata.rawJson = parsed;
+
+          if (parsed.loc && typeof parsed.loc === 'object') {
+            metadata.loc = {
+              x: Number(parsed.loc.x) || 0,
+              y: Number(parsed.loc.y) || 0,
+              z: Number(parsed.loc.z) || 0,
+            };
+          }
+          if (typeof parsed.area === 'string') {
+            metadata.area = parsed.area;
+            metadata.areaName = getAreaName(parsed.area, Boolean(parsed.onislandx));
+          }
+          if (parsed.creat) {
+            const ts = Number(parsed.creat);
+            if (!isNaN(ts) && ts > 0) {
+              metadata.timestamp = ts;
+              metadata.createdAt = new Date(ts * 1000);
+            }
+          }
+          if (parsed.time && typeof parsed.time === 'object') {
+            metadata.inGameTime = {
+              hour: Number(parsed.time.hour) || 0,
+              minute: Number(parsed.time.minute) || 0,
+              second: Number(parsed.time.second) || 0,
+              day: Number(parsed.time.day) || 1,
+              month: Number(parsed.time.month) || 1,
+              year: Number(parsed.time.year) || 2013,
+            };
+          }
+          if (Array.isArray(parsed.plyrs)) {
+            metadata.players = parsed.plyrs.filter((p: unknown) => typeof p === 'string');
+          }
+          metadata.isSelfie = Boolean(parsed.slf);
+          metadata.isMugshot = Boolean(parsed.mug);
+          metadata.isDirector = Boolean(parsed.drctr);
+          metadata.isRockstarEditor = Boolean(parsed.rsedtr);
+          metadata.isCayoPerico = Boolean(parsed.onislandx);
+          metadata.isMeme = Boolean(parsed.meme);
+          if (parsed.uid) metadata.uid = Number(parsed.uid);
+          if (parsed.crewid) metadata.crewId = Number(parsed.crewid);
+          if (parsed.street) metadata.streetId = Number(parsed.street);
+        } else {
+          warnings.push('Unterminated JSON metadata payload in file.');
+        }
       } else {
-        // Fallback: scan for { ... }
-        const openBrace = bytes.indexOf(0x7b, jsonMarkerIdx); // '{'
-        if (openBrace !== -1) {
-          const closeBrace = bytes.lastIndexOf(0x7d); // '}'
-          if (closeBrace > openBrace) {
-            jsonBytes = bytes.subarray(openBrace, closeBrace + 1);
-          }
-        }
-      }
-
-      if (jsonBytes) {
-        const jsonText = new TextDecoder('utf-8', { fatal: false }).decode(jsonBytes).trim();
-        const parsed = JSON.parse(jsonText);
-        metadata.rawJson = parsed;
-
-        if (parsed.loc && typeof parsed.loc === 'object') {
-          metadata.loc = {
-            x: Number(parsed.loc.x) || 0,
-            y: Number(parsed.loc.y) || 0,
-            z: Number(parsed.loc.z) || 0,
-          };
-        }
-        if (typeof parsed.area === 'string') {
-          metadata.area = parsed.area;
-          metadata.areaName = getAreaName(parsed.area, Boolean(parsed.onislandx));
-        }
-        if (parsed.creat) {
-          const ts = Number(parsed.creat);
-          if (!isNaN(ts) && ts > 0) {
-            metadata.timestamp = ts;
-            metadata.createdAt = new Date(ts * 1000);
-          }
-        }
-        if (Array.isArray(parsed.plyrs)) {
-          metadata.players = parsed.plyrs.filter((p: unknown) => typeof p === 'string');
-        }
-        metadata.isSelfie = Boolean(parsed.slf);
-        metadata.isMugshot = Boolean(parsed.mug);
-        metadata.isDirector = Boolean(parsed.drctr);
-        metadata.isRockstarEditor = Boolean(parsed.rsedtr);
-        metadata.isCayoPerico = Boolean(parsed.onislandx);
-        metadata.isMeme = Boolean(parsed.meme);
-        if (parsed.uid) metadata.uid = Number(parsed.uid);
-        if (parsed.crewid) metadata.crewId = Number(parsed.crewid);
-        if (parsed.street) metadata.streetId = Number(parsed.street);
+        warnings.push('No opening brace found for JSON metadata block.');
       }
     } catch {
       warnings.push('Failed to fully parse embedded JSON metadata block.');
